@@ -11,12 +11,12 @@ namespace FileDownloader
 {
     class Downloader
     {
-        MainWindow mainWindow;
-
         public Downloader(MainWindow mainWindow)
         {
-            this.mainWindow = mainWindow;
+            MainWindow = mainWindow;
         }
+
+        public MainWindow MainWindow { get; set; }
 
         public async Task GetFile(string url, string path)
         {
@@ -40,48 +40,52 @@ namespace FileDownloader
                 fileSize = response.ContentLength;
                 part = (int)(fileSize / nums);
                 seek = response.GetResponseStream().CanSeek;
-                await mainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
+                await MainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
                 {
-                    mainWindow.outputText.Text += $"File name: {fileName}\n";
-                    mainWindow.outputText.Text += $"File size: {fileSize}\n";
-                    mainWindow.outputText.Text += $"Seek: {seek}\n";
+                    MainWindow.outputText.Text += $"File name: {fileName}\n";
+                    MainWindow.outputText.Text += $"File size: {fileSize}\n";
+                    MainWindow.outputText.Text += $"Seek: {seek}\n";
                 }));
                 if (!seek)
                 {
-                    await mainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
+                    await MainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
                     {
-                        mainWindow.outputText.Text += "Start download file.\n";
+                        MainWindow.outputText.Text += "Start download file.\n";
                     }));
-                    Stream result = response.GetResponseStream();
-                    int bytesReadTotal = 0;
-
-                    FileStream file = new FileStream(path + "\\" + fileName, FileMode.Create, FileAccess.Write);
-                    int n;
-                    while (true)
+                    using (Stream result = response.GetResponseStream())
                     {
-                        n = result.Read(inBuf, 0, newByte);
-                        if (n <= 0)
+                        int bytesReadTotal = 0;
+
+                        using (FileStream file = new FileStream(path + "\\" + fileName, FileMode.Create, FileAccess.Write))
                         {
-                            break;
+                            int n;
+                            while (true)
+                            {
+                                n = result.Read(inBuf, 0, newByte);
+                                if (n <= 0)
+                                {
+                                    break;
+                                }
+
+                                file.Write(inBuf, 0, n);
+
+                                bytesReadTotal += n;
+                                await MainWindow.progressBar.Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(delegate ()
+                                {
+                                    MainWindow.progressBar.Value = (double)bytesReadTotal * 100 / fileSize;
+                                }));
+                            }
                         }
-
-                        file.Write(inBuf, 0, n);
-
-                        bytesReadTotal += n;
-                        await mainWindow.progressBar.Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(delegate ()
+                        await MainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
                         {
-                            mainWindow.progressBar.Value = ((double)bytesReadTotal * 100) / (double)fileSize;
+                            MainWindow.outputText.Text += $"File \"{fileName}\" downloaded. Total size {bytesReadTotal / 1024} KB\n";
                         }));
                     }
-                    await mainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
-                    {
-                        mainWindow.outputText.Text += $"Finish download file. Total size {bytesReadTotal}\n";
-                    }));
                 }
                 else
                 {
                     //List<Task> tasks = new List<Task>();
-                    Parallel.For(0, (int)nums, i =>
+                    Parallel.For(0, nums, i =>
                     {
                         //Console.WriteLine(new string('-', 20));
                         //Console.WriteLine($"Thread: {Thread.CurrentThread.ManagedThreadId} Started");
@@ -96,8 +100,8 @@ namespace FileDownloader
                             end = start + part;
                         }
 
-                        string partFileName = fileName + "." + i + ".tmp";
-                        request = (HttpWebRequest)WebRequest.Create(mainWindow.url.Text);
+                        string partFileName = path + "\\" + fileName + "." + i + ".tmp";
+                        request = (HttpWebRequest)WebRequest.Create(MainWindow.url.Text);
                         request.AddRange(start, end);
                         HttpWebResponse webResponse = (HttpWebResponse)request.GetResponse();
                         Stream str = webResponse.GetResponseStream();
