@@ -8,7 +8,8 @@
         Title="MainWindow" MinHeight="270" MinWidth="480">
     <Grid>
         <ProgressBar Name="progressBar" Minimum="0" Maximum="100" HorizontalAlignment="Stretch" Height="40" Margin="10,10,10,10" VerticalAlignment="Bottom"/>
-        <Button Name="startButton" Content="Start" HorizontalAlignment="Left" Margin="10,10,10,60" VerticalAlignment="Bottom" Width="120" Height="40" Click="Button_Click"/>
+        <Button Name="startButton" Content="Start" HorizontalAlignment="Left" Margin="10,10,10,60" VerticalAlignment="Bottom" Width="120" Height="40" Click="StartButton_Click"/>
+        <Button Name="cancelButton" Content="Cancel" HorizontalAlignment="Right" Margin="10,10,10,60" VerticalAlignment="Bottom" Width="120" Height="40" Click="CancelButton_Click"/>
         <TextBox Name="url"  HorizontalAlignment="Stretch" Height="20" Margin="10,10,10,10" Text="" VerticalAlignment="Top" Width="Auto"/>
         <TextBlock Name="outputText" HorizontalAlignment="Stretch" MinHeight="100" Margin="10,70,10,10" VerticalAlignment="Top" Width="Auto"/>
         <TextBox Name="path"  HorizontalAlignment="Stretch" Height="20" Margin="10,40,10,10" Text="C:\Temp" VerticalAlignment="Top" Width="Auto"/>

@@ -1,9 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 
@@ -18,12 +17,78 @@ namespace FileDownloader
 
         public MainWindow MainWindow { get; set; }
 
-        public async Task GetFile(string url, string path)
+        public async Task GetFileAsync(string url, string path, CancellationTokenSource cts)
         {
-            await Task.Run(() => DownloadFile(url, path));
+            await Task.Run(() => DownloadFileAsync(url, path, cts));
         }
 
-        async void DownloadFile(string url, string path)
+        async Task GetPartFileAsync(string url, long start, long end, string pathFileName, CancellationTokenSource cts)
+        {
+            await Task.Run(() => DownloadPartFileAsync(url, start, end, pathFileName, cts));
+        }
+
+        async void DownloadPartFileAsync(string url, long start, long end, string pathFileName, CancellationTokenSource cts)
+        {
+            int newByte = 131072;
+            byte[] inBuf = new byte[newByte];
+            int bytesReadTotal = 0;
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            request.AddRange(start, end);
+            using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+            {
+                using (Stream result = response.GetResponseStream())
+                {
+
+                    using (FileStream file = new FileStream(pathFileName, FileMode.Create, FileAccess.Write))
+                    {
+                        int n;
+                        try
+                        {
+                            while (true)
+                            {
+                                n = result.Read(inBuf, 0, newByte);
+                                if (n <= 0)
+                                {
+                                    break;
+                                }
+
+                                await file.WriteAsync(inBuf, 0, n, cts.Token);
+
+                                bytesReadTotal += n;
+                                await MainWindow.progressBar.Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(delegate ()
+                                {
+                                    MainWindow.progressBar.Value = (double)bytesReadTotal * 100 / response.ContentLength;
+                                }));
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            await MainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
+                            {
+                                MainWindow.outputText.Text += $"File \"{pathFileName.Split('\\').Last()}\" download canceled.\n";
+                            }));
+                            await MainWindow.progressBar.Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(delegate ()
+                            {
+                                MainWindow.progressBar.Value = 0;
+                            }));
+                        }
+                        catch (Exception)
+                        {
+                            await MainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
+                            {
+                                MainWindow.outputText.Text += $"Download failed.\n";
+                            }));
+                        }
+                    }
+                    await MainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
+                    {
+                        MainWindow.outputText.Text += $"File \"{pathFileName.Split('\\').Last()}\" downloaded. Total size {bytesReadTotal}\n";
+                    }));
+                }
+            }
+        }
+
+        async void DownloadFileAsync(string url, string path, CancellationTokenSource cts)
         {
             int nums = 4; //количество потоков
             long start, end;
@@ -50,46 +115,15 @@ namespace FileDownloader
                 {
                     await MainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
                     {
-                        MainWindow.outputText.Text += "Start download file.\n";
+                        MainWindow.outputText.Text += $"Download file \"{fileName}\" started.\n";
                     }));
-                    using (Stream result = response.GetResponseStream())
-                    {
-                        int bytesReadTotal = 0;
 
-                        using (FileStream file = new FileStream(path + "\\" + fileName, FileMode.Create, FileAccess.Write))
-                        {
-                            int n;
-                            while (true)
-                            {
-                                n = result.Read(inBuf, 0, newByte);
-                                if (n <= 0)
-                                {
-                                    break;
-                                }
-
-                                file.Write(inBuf, 0, n);
-
-                                bytesReadTotal += n;
-                                await MainWindow.progressBar.Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(delegate ()
-                                {
-                                    MainWindow.progressBar.Value = (double)bytesReadTotal * 100 / fileSize;
-                                }));
-                            }
-                        }
-                        await MainWindow.outputText.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate ()
-                        {
-                            MainWindow.outputText.Text += $"File \"{fileName}\" downloaded. Total size {bytesReadTotal / 1024} KB\n";
-                        }));
-                    }
+                    await GetPartFileAsync(url, 0, fileSize, path + "\\" + fileName, cts);
                 }
                 else
                 {
-                    //List<Task> tasks = new List<Task>();
-                    Parallel.For(0, nums, i =>
+                    Parallel.For(0, nums, async i =>
                     {
-                        //Console.WriteLine(new string('-', 20));
-                        //Console.WriteLine($"Thread: {Thread.CurrentThread.ManagedThreadId} Started");
-
                         start = i * part + i;
                         if (i == nums - 1)
                         {
@@ -101,37 +135,8 @@ namespace FileDownloader
                         }
 
                         string partFileName = path + "\\" + fileName + "." + i + ".tmp";
-                        request = (HttpWebRequest)WebRequest.Create(MainWindow.url.Text);
-                        request.AddRange(start, end);
-                        HttpWebResponse webResponse = (HttpWebResponse)request.GetResponse();
-                        Stream str = webResponse.GetResponseStream();
-                        int bytesReadTotal = 0;
-
-                        FileStream fstr = new FileStream(partFileName, FileMode.Create, FileAccess.Write);
-
-                        while (true)
-                        {
-                            int n = str.Read(inBuf, 0, newByte);
-                            if (n <= 0)
-                            {
-                                //Console.WriteLine($"Thread: {Thread.CurrentThread.ManagedThreadId} Finished");
-                                break;
-                            }
-
-                            fstr.WriteAsync(inBuf, 0, n);
-
-                            bytesReadTotal += n;
-                        }
-
-                        //Console.WriteLine($"Thread: {Thread.CurrentThread.ManagedThreadId} download: {bytesReadTotal} byte");
-                        //Console.WriteLine(new string('-', 20));
-                        //var t = Task.Run(() => ThreadDownloadFileAsync(vars));
-                        //tasks.Add(t);
+                        await GetPartFileAsync(url, start, end, partFileName, cts);
                     });
-                    //    var t = Task.Run(() => ThreadDownloadFileAsync(vars));
-                    //    tasks.Add(t);
-                    //}
-                    //Task.WaitAll(tasks.ToArray());
                 }
             }
         }

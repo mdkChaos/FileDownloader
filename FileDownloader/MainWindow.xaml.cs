@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,15 +23,26 @@ namespace FileDownloader
     /// </summary>
     public partial class MainWindow : Window
     {
+        CancellationTokenSource cts;
         public MainWindow()
         {
             InitializeComponent();
         }
 
-        private async void Button_Click(object sender, RoutedEventArgs e)
+        private async void StartButton_Click(object sender, RoutedEventArgs e)
         {
+            cts = new CancellationTokenSource();
             Downloader downloader = new Downloader(this);
-            await downloader.GetFile(url.Text, path.Text);
+            await downloader.GetFileAsync(url.Text, path.Text, cts);
+            url.Text = "";
+        }
+
+        private void CancelButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (cts != null)
+            {
+                cts.Cancel();
+            }
         }
     }
 }
